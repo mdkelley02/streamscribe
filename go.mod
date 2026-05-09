@@ -5,7 +5,7 @@ go 1.26.0
 replace github.com/ggerganov/whisper.cpp/bindings/go => ./whisper.cpp/bindings/go
 
 require (
-	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-00010101000000-000000000000
+	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260507042818-c81b2dabbc45
 	github.com/stretchr/testify v1.9.0
 )
 

@@ -42,6 +42,38 @@ pip install yt-dlp
 
 `ggml-large-v3-turbo.bin` fits in 12 GB VRAM and gives the best accuracy-to-speed ratio. `ggml-tiny.en.bin` is significantly faster and sufficient for English-only content.
 
+## Installation
+
+```sh
+go get github.com/mdkelley02/streamscribe
+```
+
+streamscribe links against whisper.cpp via CGO, so consumers must build the whisper.cpp C library and point CGO at it before `go build` will succeed. Clone whisper.cpp wherever you keep third-party sources and build it once:
+
+```sh
+git clone https://github.com/ggerganov/whisper.cpp.git
+cmake -B whisper.cpp/build -S whisper.cpp \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_CUDA=ON -DGGML_CUDA_FA=ON \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_CUDA_ARCHITECTURES=89   # adjust for your GPU; see table below
+cmake --build whisper.cpp/build --config Release -j$(nproc)
+```
+
+Then build your app with the env vars wired up:
+
+```sh
+WHISPER_DIR=$(pwd)/whisper.cpp
+CUDA_LIB_DIR=/usr/local/cuda/lib64
+
+C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include \
+LIBRARY_PATH=$WHISPER_DIR/build/src:$WHISPER_DIR/build/ggml/src:$CUDA_LIB_DIR \
+CGO_LDFLAGS="-Wl,-rpath,$WHISPER_DIR/build/src -Wl,-rpath,$WHISPER_DIR/build/ggml/src -Wl,-rpath,$CUDA_LIB_DIR" \
+go build ./...
+```
+
+The `Makefile` in this repo is a working reference for these flags.
+
 ## Usage
 
 ```go
