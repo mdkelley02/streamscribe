@@ -53,7 +53,6 @@ func (y *ytdlpExtractor) resolveURL(
 	cmd := exec.CommandContext(ctx, "yt-dlp",
 		"-f", "bestaudio",
 		"-o", tmpPath,
-		"--no-progress",
 		"--quiet",
 		"--no-part",
 		"--force-overwrites",

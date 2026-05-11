@@ -54,11 +54,10 @@ var _ ChunkExtractor = (*ffmpegExtractor)(nil)
 //
 // Adding support for a new platform requires only a constructor and a
 // resolveURL function — no changes to the chunking pipeline.
-//
-// resolveURL may optionally return a cleanup function (e.g. to delete a
-// downloaded temp file). cleanup is invoked after the chunker exits; it
-// may be nil when no cleanup is needed.
 type ffmpegExtractor struct {
+	// resolveURL turns a user-facing URL into something ffmpeg can open.
+	// It may optionally return a cleanup func (e.g. to delete a downloaded
+	// temp file), invoked after the chunker exits; nil means no cleanup.
 	resolveURL func(ctx context.Context, url string) (mediaPath string, cleanup func(), err error)
 }
 
