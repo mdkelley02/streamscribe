@@ -59,33 +59,33 @@ type rssMediaContent struct {
 // No external tools required.
 func NewPodcastRSS() ChunkExtractor {
 	return &ffmpegExtractor{
-		resolveURL: func(ctx context.Context, feedURL string) (string, error) {
+		resolveURL: func(ctx context.Context, feedURL string) (string, func(), error) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 			if err != nil {
-				return "", fmt.Errorf("build request: %w", err)
+				return "", nil, fmt.Errorf("build request: %w", err)
 			}
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
-				return "", fmt.Errorf("fetch feed: %w", err)
+				return "", nil, fmt.Errorf("fetch feed: %w", err)
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return "", fmt.Errorf("feed returned HTTP %d", resp.StatusCode)
+				return "", nil, fmt.Errorf("feed returned HTTP %d", resp.StatusCode)
 			}
 
 			var feed rssFeed
 			if err := xml.NewDecoder(resp.Body).Decode(&feed); err != nil {
-				return "", fmt.Errorf("parse feed: %w", err)
+				return "", nil, fmt.Errorf("parse feed: %w", err)
 			}
 
 			for _, item := range feed.Channel.Items {
 				if url := item.audioURL(); url != "" {
-					return url, nil
+					return url, nil, nil
 				}
 			}
-			return "", fmt.Errorf("no audio enclosure found in RSS feed")
+			return "", nil, fmt.Errorf("no audio enclosure found in RSS feed")
 		},
 	}
 }

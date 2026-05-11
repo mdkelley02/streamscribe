@@ -11,11 +11,11 @@ import (
 // No external tools required.
 func NewLocalFile() ChunkExtractor {
 	return &ffmpegExtractor{
-		resolveURL: func(_ context.Context, path string) (string, error) {
+		resolveURL: func(_ context.Context, path string) (string, func(), error) {
 			if _, err := os.Stat(path); err != nil {
-				return "", fmt.Errorf("local file: %w", err)
+				return "", nil, fmt.Errorf("local file: %w", err)
 			}
-			return path, nil
+			return path, nil, nil
 		},
 	}
 }
@@ -26,8 +26,8 @@ func NewLocalFile() ChunkExtractor {
 // No external tools required.
 func NewDirectURL() ChunkExtractor {
 	return &ffmpegExtractor{
-		resolveURL: func(_ context.Context, url string) (string, error) {
-			return url, nil
+		resolveURL: func(_ context.Context, url string) (string, func(), error) {
+			return url, nil, nil
 		},
 	}
 }
@@ -36,5 +36,10 @@ func NewDirectURL() ChunkExtractor {
 // The resolver receives the URL string and must return a direct media URL
 // that ffmpeg can open (HLS manifest, MP4, RTMP stream, etc.).
 func NewCustom(resolve func(context.Context, string) (string, error)) ChunkExtractor {
-	return &ffmpegExtractor{resolveURL: resolve}
+	return &ffmpegExtractor{
+		resolveURL: func(ctx context.Context, url string) (string, func(), error) {
+			mediaURL, err := resolve(ctx, url)
+			return mediaURL, nil, err
+		},
+	}
 }

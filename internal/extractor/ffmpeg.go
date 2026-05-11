@@ -54,8 +54,12 @@ var _ ChunkExtractor = (*ffmpegExtractor)(nil)
 //
 // Adding support for a new platform requires only a constructor and a
 // resolveURL function — no changes to the chunking pipeline.
+//
+// resolveURL may optionally return a cleanup function (e.g. to delete a
+// downloaded temp file). cleanup is invoked after the chunker exits; it
+// may be nil when no cleanup is needed.
 type ffmpegExtractor struct {
-	resolveURL func(ctx context.Context, url string) (string, error)
+	resolveURL func(ctx context.Context, url string) (mediaPath string, cleanup func(), err error)
 }
 
 // ExtractChunks resolves the media URL, launches a single ffmpeg process, and
@@ -78,10 +82,13 @@ func (f *ffmpegExtractor) ExtractChunks(
 		defer close(chunkCh)
 		defer close(errCh)
 
-		mediaURL, err := f.resolveURL(ctx, URL)
+		mediaURL, cleanup, err := f.resolveURL(ctx, URL)
 		if err != nil {
 			errCh <- fmt.Errorf("resolve url: %w", err)
 			return
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 
 		args := []string{
@@ -202,9 +209,12 @@ func (f *ffmpegExtractor) ExtractChunks(
 }
 
 func (f *ffmpegExtractor) GetDuration(ctx context.Context, url string) (time.Duration, error) {
-	mediaURL, err := f.resolveURL(ctx, url)
+	mediaURL, cleanup, err := f.resolveURL(ctx, url)
 	if err != nil {
 		return 0, fmt.Errorf("resolve url: %w", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 
 	cmd := exec.CommandContext(ctx, "ffprobe",
