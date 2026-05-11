@@ -48,31 +48,16 @@ pip install yt-dlp
 go get github.com/mdkelley02/streamscribe
 ```
 
-streamscribe links against whisper.cpp via CGO, so consumers must build the whisper.cpp C library and point CGO at it before `go build` will succeed. Clone whisper.cpp wherever you keep third-party sources and build it once:
+streamscribe links against whisper.cpp via CGO. Build and install whisper.cpp to `/usr/local` once per machine — after that, every Go consumer (`go build`, `go test`, hot-reload tools like air, your IDE) finds the headers and libs through the default search paths with no env vars.
 
 ```sh
 git clone https://github.com/ggerganov/whisper.cpp.git
-cmake -B whisper.cpp/build -S whisper.cpp \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DGGML_CUDA=ON -DGGML_CUDA_FA=ON \
-    -DBUILD_SHARED_LIBS=ON \
-    -DCMAKE_CUDA_ARCHITECTURES=89   # adjust for your GPU; see table below
-cmake --build whisper.cpp/build --config Release -j$(nproc)
+make install-whisper   # builds whisper.cpp with CUDA, installs to /usr/local, runs ldconfig
 ```
 
-Then build your app with the env vars wired up:
+That target only elevates for the install step itself; the cmake build artifacts stay owned by your user. To target a different GPU architecture, edit `CMAKE_CUDA_ARCHITECTURES` in the Makefile (see the table in [Build](#build)).
 
-```sh
-WHISPER_DIR=$(pwd)/whisper.cpp
-CUDA_LIB_DIR=/usr/local/cuda/lib64
-
-C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include \
-LIBRARY_PATH=$WHISPER_DIR/build/src:$WHISPER_DIR/build/ggml/src:$CUDA_LIB_DIR \
-CGO_LDFLAGS="-Wl,-rpath,$WHISPER_DIR/build/src -Wl,-rpath,$WHISPER_DIR/build/ggml/src -Wl,-rpath,$CUDA_LIB_DIR" \
-go build ./...
-```
-
-The `Makefile` in this repo is a working reference for these flags.
+Remove the installed files later with `make uninstall-whisper`. Wipe the local build dir with `make whisper-clean` (rerun `make install-whisper` to reconfigure after a whisper.cpp version bump).
 
 ## Usage
 
@@ -203,8 +188,8 @@ export PATH=/usr/local/cuda/bin:$PATH
 ### Build
 
 ```sh
-# Builds whisper.cpp with CUDA then compiles the Go binary
-make build
+make install-whisper   # one-time: builds whisper.cpp + installs headers/libs to /usr/local
+make build             # compiles the Go example binary; no env vars needed
 ```
 
 To target a different GPU architecture, edit `CMAKE_CUDA_ARCHITECTURES` in the Makefile:

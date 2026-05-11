@@ -1,11 +1,6 @@
 WHISPER_DIR := $(abspath ./whisper.cpp)
 NPROC       := $(shell nproc)
-
-# ── CGO paths ────────────────────────────────────────────────────────────────
-export C_INCLUDE_PATH := $(WHISPER_DIR)/include:$(WHISPER_DIR)/ggml/include
-export LIBRARY_PATH   := $(WHISPER_DIR)/build/src:$(WHISPER_DIR)/build/ggml/src
-export CGO_LDFLAGS    := -Wl,-rpath,$(WHISPER_DIR)/build/src \
-                         -Wl,-rpath,$(WHISPER_DIR)/build/ggml/src
+PREFIX      ?= /usr/local
 
 # ── CUDA toolkit path (WSL2: install cuda-toolkit-12-x, NOT the full driver) ─
 # Prerequisites:
@@ -14,15 +9,19 @@ export CGO_LDFLAGS    := -Wl,-rpath,$(WHISPER_DIR)/build/src \
 #   sudo apt-get update
 #   sudo apt-get install -y cuda-toolkit-12-8
 #   export PATH=/usr/local/cuda/bin:$PATH
-CUDA_DIR     := /usr/local/cuda
-CUDA_LIB_DIR := $(CUDA_DIR)/lib64
 
-.PHONY: all build bulk whisper whisper-clean clean test
+.PHONY: all build install-whisper uninstall-whisper whisper-clean clean test
 
 all: build
 
-# Run cmake configure + incremental build (fast on subsequent runs)
-whisper:
+# Build whisper.cpp with CUDA and install headers + shared libs into $(PREFIX)
+# so any CGO consumer (this repo, downstream apps, IDEs, hot-reloaders) finds
+# them via the default search paths — no per-project env wiring required.
+#
+# Run once per machine. Rerun after bumping whisper.cpp or changing the GPU
+# arch (CMAKE_CUDA_ARCHITECTURES below). Build artifacts stay owned by the
+# invoking user; only the install step elevates with sudo.
+install-whisper:
 	cmake -B $(WHISPER_DIR)/build -S $(WHISPER_DIR) \
 	    -DCMAKE_BUILD_TYPE=Release \
 	    -DGGML_CUDA=ON \
@@ -30,25 +29,23 @@ whisper:
 	    -DBUILD_SHARED_LIBS=ON \
 	    -DCMAKE_CUDA_ARCHITECTURES=89
 	cmake --build $(WHISPER_DIR)/build --config Release -j$(NPROC)
+	sudo cmake --install $(WHISPER_DIR)/build --prefix=$(PREFIX)
+	sudo ldconfig
 
-build:
-	@echo "Building streamscribe (CUDA)..."
-	CGO_LDFLAGS="$(CGO_LDFLAGS) -Wl,-rpath,$(CUDA_LIB_DIR)" \
-	LIBRARY_PATH="$(LIBRARY_PATH):$(CUDA_LIB_DIR)" \
-	go build -o streamscribe ./cmd/example
+# Remove the files install-whisper placed under $(PREFIX).
+uninstall-whisper:
+	@test -f $(WHISPER_DIR)/build/install_manifest.txt \
+	    || { echo "no install_manifest.txt at $(WHISPER_DIR)/build; nothing to uninstall"; exit 0; }
+	sudo xargs rm -f < $(WHISPER_DIR)/build/install_manifest.txt
+	sudo ldconfig
 
-bulk:
-	@echo "Running bulk-transcriber (CUDA)..."
-	CGO_LDFLAGS="$(CGO_LDFLAGS) -Wl,-rpath,$(CUDA_LIB_DIR)" \
-	LIBRARY_PATH="$(LIBRARY_PATH):$(CUDA_LIB_DIR)" \
-	go run ./cmd/bulk-transcriber
-
-# ── Utilities ────────────────────────────────────────────────────────────────
-
-# Full rebuild of whisper.cpp from scratch (only needed after upstream changes)
+# Wipe the cmake build directory so the next install-whisper reconfigures
+# from scratch (needed after upstream whisper.cpp changes).
 whisper-clean:
 	rm -rf $(WHISPER_DIR)/build
-	$(MAKE) whisper
+
+build:
+	go build -o streamscribe ./cmd/example
 
 clean:
 	rm -f streamscribe
@@ -56,7 +53,4 @@ clean:
 TEST_FLAGS ?=
 
 test:
-	@echo "Running tests..."
-	CGO_LDFLAGS="$(CGO_LDFLAGS) -Wl,-rpath,$(CUDA_LIB_DIR)" \
-	LIBRARY_PATH="$(LIBRARY_PATH):$(CUDA_LIB_DIR)" \
 	go test $(TEST_FLAGS) ./...
